@@ -1,0 +1,167 @@
+#include <HX711_ADC.h>
+#include <LiquidCrystal_I2C.h>
+
+#if defined(ESP8266)|| defined(ESP32) || defined(AVR)
+#include <EEPROM.h>
+#endif
+
+// ---------------- LCD ----------------
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// ---------------- HX711 ----------------
+const int HX711_dout = 4;
+const int HX711_sck  = 5;
+
+HX711_ADC LoadCell(HX711_dout, HX711_sck);
+
+// ---------------- EEPROM ----------------
+const int calVal_eepromAdress = 0;
+
+// ---------------- TIMING ----------------
+unsigned long t = 0;
+
+// ---------------- FUNCTION DECLARATIONS ----------------
+void calibrate();
+void showWeight(float weight);
+
+// =======================================================
+void setup() {
+  Serial.begin(57600);
+  delay(100);
+
+  lcd.init();
+  lcd.backlight();
+
+  lcd.setCursor(0,0);
+  lcd.print("Load Cell Init");
+  lcd.setCursor(0,1);
+  lcd.print("Please wait...");
+  
+  Serial.println("\n=== HX711 LOAD CELL ===");
+  Serial.println("Starting...");
+
+  LoadCell.begin();
+  LoadCell.start(2000, true);
+
+  if (LoadCell.getTareTimeoutFlag() || LoadCell.getSignalTimeoutFlag()) {
+    Serial.println("ERROR: Check HX711 wiring!");
+    lcd.clear();
+    lcd.print("HX711 ERROR");
+    while (1);
+  }
+
+  float calibrationValue = 1.0;
+  EEPROM.get(calVal_eepromAdress, calibrationValue);
+
+  if (isnan(calibrationValue) || calibrationValue == 0) {
+    Serial.println("No calibration found.");
+    calibrate();
+  } else {
+    LoadCell.setCalFactor(calibrationValue);
+    Serial.print("Calibration loaded: ");
+    Serial.println(calibrationValue);
+  }
+
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Ready");
+  delay(1000);
+}
+
+// =======================================================
+void loop() {
+  static boolean newDataReady = false;
+
+  if (LoadCell.update()) newDataReady = true;
+
+  if (newDataReady && millis() > t + 500) {
+    float weight = LoadCell.getData();
+    Serial.print("Weight: ");
+    Serial.println(weight);
+
+    showWeight(weight);
+
+    newDataReady = false;
+    t = millis();
+  }
+
+  // -------- Serial Commands --------
+  if (Serial.available()) {
+    char cmd = Serial.read();
+    if (cmd == 'r') calibrate();
+    if (cmd == 't') LoadCell.tareNoDelay();
+  }
+
+  if (LoadCell.getTareStatus()) {
+    Serial.println("Tare complete");
+  }
+}
+
+// =======================================================
+void showWeight(float weight) {
+  lcd.setCursor(0,0);
+  lcd.print("Weight (grams)");
+
+  lcd.setCursor(0,1);
+  lcd.print("                "); // clear line
+  lcd.setCursor(0,1);
+
+  lcd.print((int)weight);
+  lcd.print(" g");
+}
+
+// =======================================================
+void calibrate() {
+  Serial.println("\n--- CALIBRATION MODE ---");
+  lcd.clear();
+  lcd.print("Calibration");
+  lcd.setCursor(0,1);
+  lcd.print("See Serial");
+
+  Serial.println("Remove all weight.");
+  Serial.println("Send 't' to tare.");
+
+  while (true) {
+    LoadCell.update();
+    if (Serial.available()) {
+      if (Serial.read() == 't') {
+        LoadCell.tareNoDelay();
+        break;
+      }
+    }
+  }
+
+  while (!LoadCell.getTareStatus()) {
+    LoadCell.update();
+  }
+
+  Serial.println("Tare done.");
+  Serial.println("Place known weight.");
+  Serial.println("Enter weight value (e.g. 100.0):");
+
+  float known_mass = 0;
+  while (known_mass == 0) {
+    LoadCell.update();
+    if (Serial.available()) {
+      known_mass = Serial.parseFloat();
+    }
+  }
+
+  LoadCell.refreshDataSet();
+  float newCal = LoadCell.getNewCalibration(known_mass);
+
+  Serial.print("New Calibration Value: ");
+  Serial.println(newCal);
+
+  EEPROM.put(calVal_eepromAdress, newCal);
+#if defined(ESP8266)|| defined(ESP32)
+  EEPROM.commit();
+#endif
+
+  LoadCell.setCalFactor(newCal);
+
+  Serial.println("Calibration saved!");
+  lcd.clear();
+  lcd.print("Cal Saved!");
+  delay(1500);
+}
