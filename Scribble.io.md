@@ -2703,3 +2703,579 @@ Keep building, keep learning, and most importantly, have fun! 🚀
 ---
 
 **Happy Coding!** 🎨👨‍💻👩‍💻
+# 📄 Game Component HTML - Detailed Explanation
+
+## Overview
+The Game Component HTML is the main game interface where players draw, guess, and interact. It's divided into three main sections: Players Panel (left), Canvas Area (center), and Chat Panel (right).
+
+---
+
+## Complete Structure
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    HEADER                           │
+│  Room Code | Timer | Leave Button                   │
+├──────────┬──────────────────────────┬───────────────┤
+│          │                          │               │
+│ PLAYERS  │      CANVAS AREA         │     CHAT      │
+│  PANEL   │                          │     PANEL     │
+│          │  - Word Display          │               │
+│ - List   │  - Drawing Tools         │  - Messages   │
+│ - Scores │  - Canvas                │  - Input      │
+│ - Start  │  - Overlays              │               │
+│          │                          │               │
+└──────────┴──────────────────────────┴───────────────┘
+```
+
+---
+
+## Section-by-Section Breakdown
+
+### 1. Game Header
+```html
+<div class="game-header">
+  <div class="room-info">
+    <h2>Room: {{ roomCode }}</h2>
+    <button class="btn-copy" (click)="copyRoomCode()">📋 Copy</button>
+  </div>
+  <div class="timer" *ngIf="gameStarted && !roundEnded">
+    ⏱️ {{ timeRemaining }}s
+  </div>
+  <button class="btn-leave" (click)="leaveRoom()">🚪 Leave</button>
+</div>
+```
+
+**Purpose**: Shows room information and controls
+**Key Elements**:
+- `roomCode`: Displayed room code
+- `*ngIf="gameStarted && !roundEnded"`: Timer only shows during active rounds
+- `(click)="copyRoomCode()"`: Copies code to clipboard
+- `(click)="leaveRoom()"`: Disconnects and returns to lobby
+
+**Angular Features Used**:
+- `{{ }}`: String interpolation (data binding)
+- `*ngIf`: Conditional rendering
+- `(click)`: Event binding
+
+---
+
+### 2. Players Panel (Left Sidebar)
+
+```html
+<div class="players-panel">
+  <h3>Players ({{ players.length }})</h3>
+  
+  <div class="players-list">
+    <div
+      *ngFor="let player of getPlayersSorted()"
+      class="player-card"
+      [class.drawing]="player.isDrawing"
+      [class.guessed]="player.hasGuessedCorrectly"
+    >
+      <div class="player-info">
+        <span class="player-name">{{ player.username }}</span>
+        <span class="player-status" *ngIf="player.isDrawing">✏️ Drawing</span>
+        <span class="player-status correct" *ngIf="player.hasGuessedCorrectly && !player.isDrawing">
+          ✓ Guessed!
+        </span>
+      </div>
+      <div class="player-score">{{ player.score }} pts</div>
+    </div>
+  </div>
+
+  <div class="game-controls" *ngIf="!gameStarted">
+    <button class="btn-start" (click)="startGame()">🎮 Start Game</button>
+    <p class="hint">Need at least 2 players</p>
+  </div>
+</div>
+```
+
+**Purpose**: Shows all players with their scores and status
+
+**Key Features**:
+1. **Player Count**: `{{ players.length }}` shows total players
+2. **Player List**: `*ngFor` loops through players
+3. **Conditional Classes**: 
+   - `[class.drawing]`: Highlights current drawer
+   - `[class.guessed]`: Shows who guessed correctly
+4. **Sorted Display**: `getPlayersSorted()` sorts by score (highest first)
+5. **Start Button**: Only visible before game starts
+
+**Angular Directives**:
+- `*ngFor`: Repeats element for each item in array
+- `[class.className]`: Conditionally adds CSS class
+- `*ngIf`: Shows/hides elements based on condition
+
+---
+
+### 3. Canvas Area (Center)
+
+#### 3.1 Word Display
+```html
+<div class="word-display" *ngIf="gameStarted && !roundEnded">
+  <!-- Drawer sees actual word -->
+  <div *ngIf="isMyTurn" class="your-word">
+    <strong>Your word:</strong> {{ currentWord }}
+  </div>
+  
+  <!-- Guessers see masked word -->
+  <div *ngIf="!isMyTurn" class="guess-word">
+    <strong>Guess:</strong> {{ maskedWord }}
+  </div>
+</div>
+```
+
+**Purpose**: Shows word information
+- Drawer: Sees "Your word: elephant"
+- Guessers: See "Guess: ________"
+
+**Logic**:
+- `isMyTurn = true`: Show actual word
+- `isMyTurn = false`: Show underscores
+
+---
+
+#### 3.2 Drawing Tools
+```html
+<div class="tools-panel" *ngIf="isMyTurn && !roundEnded">
+  <!-- Color Palette -->
+  <div class="tool-section">
+    <label>Color:</label>
+    <div class="color-palette">
+      <button
+        *ngFor="let color of colors"
+        class="color-btn"
+        [style.background-color]="color"
+        [class.selected]="selectedColor === color"
+        (click)="selectColor(color)"
+      ></button>
+    </div>
+  </div>
+
+  <!-- Brush Size -->
+  <div class="tool-section">
+    <label>Brush Size:</label>
+    <div class="size-buttons">
+      <button
+        *ngFor="let width of lineWidths"
+        class="size-btn"
+        [class.selected]="selectedLineWidth === width"
+        (click)="selectLineWidth(width)"
+      >
+        {{ width }}px
+      </button>
+    </div>
+  </div>
+
+  <!-- Clear Button -->
+  <button class="btn-clear" (click)="clearCanvasClick()">🗑️ Clear</button>
+</div>
+```
+
+**Purpose**: Provides drawing tools
+**Only visible when**: `isMyTurn && !roundEnded`
+
+**Components**:
+1. **Color Palette**: 10 color buttons
+   - `[style.background-color]="color"`: Sets button color
+   - `[class.selected]`: Highlights selected color
+   
+2. **Brush Size**: 4 size options (2px, 5px, 10px, 15px)
+   - Shows current selection with highlight
+   
+3. **Clear Button**: Clears entire canvas
+
+---
+
+#### 3.3 Canvas Element
+```html
+<canvas
+  #canvas
+  width="800"
+  height="500"
+  (mousedown)="onMouseDown($event)"
+  (mousemove)="onMouseMove($event)"
+  (mouseup)="onMouseUp()"
+  (mouseleave)="onMouseLeave()"
+  [class.drawable]="isMyTurn"
+></canvas>
+```
+
+**Purpose**: Drawing surface
+
+**Key Attributes**:
+- `#canvas`: Template reference (accessed in TypeScript)
+- `width="800" height="500"`: Canvas dimensions
+- `(mousedown)`: Starts drawing
+- `(mousemove)`: Draws lines
+- `(mouseup)`: Stops drawing
+- `(mouseleave)`: Stops drawing if mouse leaves canvas
+- `[class.drawable]`: Changes cursor to crosshair when drawing
+
+**How Drawing Works**:
+1. Mouse down → Record position, set `isDrawing = true`
+2. Mouse move → Draw line from last position to current
+3. Mouse up → Set `isDrawing = false`
+
+---
+
+#### 3.4 Waiting Overlay
+```html
+<div class="waiting-overlay" *ngIf="!gameStarted">
+  <div class="waiting-content">
+    <h2>🎨 Waiting to Start</h2>
+    <p>Get ready to draw and guess!</p>
+    <div class="waiting-animation">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+</div>
+```
+
+**Purpose**: Shows before game starts
+**Features**:
+- Semi-transparent overlay
+- Animated dots (CSS animation)
+- Friendly message
+
+---
+
+#### 3.5 Round End Overlay
+```html
+<div class="round-end-overlay" *ngIf="roundEnded">
+  <div class="round-end-content">
+    <h2>🎉 Round Over!</h2>
+    
+    <!-- Reveal Word -->
+    <p class="reveal-word">
+      The word was: <strong>{{ roundEndData?.word }}</strong>
+    </p>
+    
+    <!-- Leaderboard -->
+    <div class="final-scores">
+      <h3>Scores:</h3>
+      <div class="score-list">
+        <div 
+          *ngFor="let player of roundEndData?.players; let i = index" 
+          class="score-item"
+          [class.first-place]="i === 0"
+          [class.second-place]="i === 1"
+          [class.third-place]="i === 2"
+        >
+          <span class="rank">
+            <span *ngIf="i === 0">🥇</span>
+            <span *ngIf="i === 1">🥈</span>
+            <span *ngIf="i === 2">🥉</span>
+            <span *ngIf="i > 2">{{ i + 1 }}.</span>
+          </span>
+          <span class="name">{{ player.username }}</span>
+          <span class="score">{{ player.score }} pts</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Next Round Button -->
+    <button class="btn-next-round" (click)="nextRound()">
+      ▶️ Next Round
+    </button>
+  </div>
+</div>
+```
+
+**Purpose**: Shows results after round ends
+
+**Features**:
+1. **Word Reveal**: Shows the correct word
+2. **Leaderboard**: Players sorted by score
+3. **Medals**: 🥇🥈🥉 for top 3
+4. **Index Tracking**: `let i = index` gets position
+5. **Conditional Styling**: Different styles for top 3
+6. **Next Round**: Button to continue playing
+
+**Safe Navigation Operator (`?`)**:
+- `roundEndData?.word`: Prevents error if `roundEndData` is null/undefined
+- Only accesses property if parent object exists
+
+---
+
+### 4. Chat Panel (Right Sidebar)
+
+```html
+<div class="chat-panel">
+  <h3>💬 Chat</h3>
+  
+  <!-- Message Display -->
+  <div class="chat-messages">
+    <div
+      *ngFor="let msg of chatMessages"
+      class="chat-message"
+      [class.system]="msg.isSystemMessage"
+      [class.correct]="msg.isCorrectGuess"
+    >
+      <span class="message-user" *ngIf="!msg.isSystemMessage">
+        {{ msg.username }}:
+      </span>
+      <span class="message-text">{{ msg.message }}</span>
+      <span class="message-time">
+        {{ msg.timestamp | date:'shortTime' }}
+      </span>
+    </div>
+    
+    <!-- Empty State -->
+    <div *ngIf="chatMessages.length === 0" class="chat-empty">
+      <p>No messages yet. Start chatting!</p>
+    </div>
+  </div>
+
+  <!-- Chat Input -->
+  <div class="chat-input">
+    <input
+      type="text"
+      [(ngModel)]="currentMessage"
+      placeholder="Type your guess..."
+      (keyup.enter)="sendMessage()"
+      [disabled]="isMyTurn || !gameStarted || roundEnded"
+      maxlength="200"
+    />
+    <button
+      (click)="sendMessage()"
+      [disabled]="isMyTurn || !gameStarted || roundEnded || !currentMessage.trim()"
+      class="btn-send"
+    >
+      📤
+    </button>
+  </div>
+  
+  <!-- Hints -->
+  <div class="chat-hints" *ngIf="gameStarted && !roundEnded">
+    <p *ngIf="isMyTurn" class="hint-drawer">
+      You can't guess while drawing!
+    </p>
+    <p *ngIf="!isMyTurn" class="hint-guesser">
+      Type your guess and press Enter
+    </p>
+  </div>
+</div>
+```
+
+**Purpose**: Real-time chat and guessing
+
+**Key Features**:
+
+1. **Message List**:
+   - Loops through all messages
+   - Different styles for system/regular/correct messages
+   - Shows timestamp using pipe: `| date:'shortTime'`
+
+2. **Empty State**:
+   - Shows friendly message when no chats
+   - `*ngIf="chatMessages.length === 0"`
+
+3. **Input Field**:
+   - `[(ngModel)]`: Two-way data binding
+   - `(keyup.enter)`: Send on Enter key
+   - `[disabled]`: Prevents input when:
+     - You're drawing (can't guess)
+     - Game hasn't started
+     - Round has ended
+
+4. **Send Button**:
+   - Disabled when input is invalid
+   - `!currentMessage.trim()`: Prevents empty messages
+
+5. **Context Hints**:
+   - Shows appropriate message based on role
+   - Drawer: "You can't guess"
+   - Guesser: "Type your guess"
+
+---
+
+## Angular Syntax Reference
+
+### Interpolation
+```html
+{{ variable }}
+```
+Displays variable value in template
+
+### Property Binding
+```html
+[property]="expression"
+```
+Binds component property to HTML element property
+
+### Event Binding
+```html
+(event)="handler()"
+```
+Calls component method when event fires
+
+### Two-Way Binding
+```html
+[(ngModel)]="variable"
+```
+Syncs input value with component variable
+
+### Structural Directives
+```html
+*ngIf="condition"        <!-- Show/hide -->
+*ngFor="let item of items"  <!-- Loop -->
+```
+
+### CSS Class Binding
+```html
+[class.className]="condition"
+```
+Adds class when condition is true
+
+### Style Binding
+```html
+[style.property]="value"
+```
+Sets inline style dynamically
+
+### Pipes
+```html
+{{ date | date:'shortTime' }}
+```
+Transforms displayed value
+
+---
+
+## Component Communication Flow
+
+```
+User Action (HTML)
+      ↓
+Event Handler (TS)
+      ↓
+SignalR Service
+      ↓
+Backend Hub
+      ↓
+Broadcast to Others
+      ↓
+SignalR Observable
+      ↓
+Component Updates
+      ↓
+HTML Re-renders
+```
+
+---
+
+## Accessibility Features
+
+1. **ARIA Labels**: `[attr.aria-label]="'Select color ' + color"`
+2. **Semantic HTML**: Proper heading hierarchy (h2, h3)
+3. **Keyboard Support**: Enter key to send messages
+4. **Disabled States**: Clear visual feedback
+5. **Alt Text**: Emojis provide visual context
+
+---
+
+## Responsive Considerations
+
+The CSS handles responsive layout, but HTML structure supports it:
+- Flexbox-friendly structure
+- No fixed positioning
+- Logical content hierarchy
+- Mobile-friendly touch targets
+
+---
+
+## Common Customizations
+
+### Adding More Colors
+```typescript
+// In component.ts
+colors = ['#000000', '#FFFFFF', '#FF0000', '#YOUR_COLOR'];
+```
+
+### Adding More Brush Sizes
+```typescript
+// In component.ts
+lineWidths = [2, 5, 10, 15, 20]; // Add 20px
+```
+
+### Changing Canvas Size
+```html
+<canvas width="1000" height="600"></canvas>
+```
+
+### Custom Chat Messages
+```html
+<div class="chat-message" [class.highlight]="msg.username === username">
+  <!-- Highlight your own messages -->
+</div>
+```
+
+---
+
+## Performance Tips
+
+1. **TrackBy in ngFor**:
+```html
+<div *ngFor="let player of players; trackBy: trackByConnectionId">
+```
+
+2. **OnPush Change Detection**:
+```typescript
+@Component({
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+```
+
+3. **Lazy Loading Images**: If adding avatars
+4. **Virtual Scrolling**: If chat gets very long
+
+---
+
+## Troubleshooting
+
+### Problem: Canvas not drawing
+**Check**: Is `isMyTurn` true?
+**Solution**: Verify drawer status in player list
+
+### Problem: Messages not appearing
+**Check**: Is SignalR connected?
+**Solution**: Check browser console for connection errors
+
+### Problem: Timer not updating
+**Check**: Is interval running?
+**Solution**: Verify `startTimer()` was called
+
+### Problem: Styles not applying
+**Check**: Is CSS file linked?
+**Solution**: Verify `styleUrls` in component decorator
+
+---
+
+## Testing the Template
+
+### Manual Test Checklist
+- [ ] Header displays room code
+- [ ] Timer counts down during rounds
+- [ ] Players list shows all connected users
+- [ ] Drawing tools only visible to drawer
+- [ ] Canvas accepts mouse input when your turn
+- [ ] Chat messages appear in real-time
+- [ ] Overlays show/hide correctly
+- [ ] Buttons enable/disable appropriately
+
+---
+
+## Next Steps
+
+1. **Style the template** with `game.component.css`
+2. **Implement component logic** in `game.component.ts`
+3. **Test with multiple browsers** simultaneously
+4. **Add animations** for better UX
+5. **Optimize for mobile** if needed
+
+---
+
+**This template is the heart of the game UI!** 🎨
